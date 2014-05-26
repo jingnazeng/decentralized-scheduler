@@ -1,7 +1,6 @@
 package resourcemanager.system.peer.rm;
 
 import common.simulation.RequestResource;
-import java.util.List;
 import se.sics.kompics.address.Address;
 import se.sics.kompics.network.Message;
 import se.sics.kompics.timer.ScheduleTimeout;
@@ -9,23 +8,28 @@ import se.sics.kompics.timer.Timeout;
 
 /**
  * User: jdowling
+ * Update: Nina Mark
  */
 public class RequestResources {
 
     public static class Request extends Message {
 
-        private final long jobID;
+
+		private final long jobID;
         private final int numCpus;
         private final int amountMemInMb;
+  
 
         public Request(Address source, Address destination, long jobID, int numCpus, int amountMemInMb) {
             super(source, destination);
             this.numCpus = numCpus;
             this.amountMemInMb = amountMemInMb;
             this.jobID = jobID;
+
         }
 
-        public int getAmountMemInMb() {
+
+		public int getAmountMemInMb() {
             return amountMemInMb;
         }
 

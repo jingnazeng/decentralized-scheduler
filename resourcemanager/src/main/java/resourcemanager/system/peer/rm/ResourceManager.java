@@ -31,9 +31,10 @@ import tman.system.peer.tman.TManSample;
 import tman.system.peer.tman.TManSamplePort;
 
 /**
- * Should have some comments here.
+ * resource scheduler
  *
  * @author jdowling
+ * @update NinaZeng Mark
  */
 public final class ResourceManager extends ComponentDefinition {
 
@@ -70,6 +71,10 @@ public final class ResourceManager extends ComponentDefinition {
 
     //This is for Scheduler. It holds the probe response for one job.
     private Map<Long, List<RequestResources.Response>> receivedProbes = new HashMap<Long, List<RequestResources.Response>>();
+
+    //statistical record of latency 
+    private long startTime, endTime, averageTime;
+    private static Map<Long, Long> timePerRequest = new HashMap<Long, Long>();
 
     public ResourceManager() {
 
@@ -127,9 +132,6 @@ public final class ResourceManager extends ComponentDefinition {
     Handler<RequestResources.Request> handleResourceAllocationRequest = new Handler<RequestResources.Request>() {
         @Override
         public void handle(RequestResources.Request event) {
-
-            logger.info("收到了来自" + event.getJobID() + "的资源分配请求");
-            
             //boolean isAvailabel = (availableResources.getFreeMemInMbs() >= event.getAmountMemInMb()) && (availableResources.getNumFreeCpus() >= event.getNumCpus());
             boolean isAvailabel = availableResources.isAvailable(event.getNumCpus(), event.getAmountMemInMb());
             trigger(new RequestResources.Response(self, event.getSource(), event.getJobID(), isAvailabel, queuedJobs.size()), networkPort);
@@ -147,7 +149,7 @@ public final class ResourceManager extends ComponentDefinition {
     Handler<RequestResources.Response> handleResourceAllocationResponse = new Handler<RequestResources.Response>() {
         @Override
         public void handle(RequestResources.Response event) {
-            logger.info(self.getId() + "收到probe的respond，这个job的id是：" + event.getJobID());
+    //        logger.info(self.getId() + "收到probe的respond，这个job的id是：" + event.getJobID());
 
             List<RequestResources.Response> list = receivedProbes.get(event.getJobID());
             if (list == null) {
@@ -157,11 +159,11 @@ public final class ResourceManager extends ComponentDefinition {
             list.add(event);
 
             if (list.size() == NUM_PROBES) {
-                RequestResources.Response minLoadResponse = Collections.min(list); // ?
+                RequestResources.Response minLoadResponse = Collections.min(list); // ? get the least loaded TBD
                 Address selectedPeer = minLoadResponse.getSource();
                 RequestResources.AssignJob schJob = new RequestResources.AssignJob(self, selectedPeer, jobsFromSimulator.get(event.getJobID()));
                 trigger(schJob, networkPort);
-                jobsFromSimulator.remove(event.getJobID());
+            //    jobsFromSimulator.remove(event.getJobID());
             }
         }
     };
@@ -171,16 +173,9 @@ public final class ResourceManager extends ComponentDefinition {
         @Override
         public void handle(CyclonSample event) {
 
-            //System.out.println("处理CyclonSample的请求");
-            //System.out.println("Received samples: " + event.getSample().size());
-
-            // receive a new list of neighbours
             neighbours.clear();
             neighbours.addAll(event.getSample());
-//            System.out.println("此节点的neighbour有：");
-//            for(int i=0; i<neighbours.size(); i++) {
-//                System.out.println(neighbours.get(i).getId()+"|");
-//            }
+
 
         }
     };
@@ -193,20 +188,22 @@ public final class ResourceManager extends ComponentDefinition {
     Handler<RequestResource> handleRequestResource = new Handler<RequestResource>() {
         @Override
         public void handle(RequestResource event) {
-            System.out.println("处理RequestResource的请求");
-            logger.info("Simulator分配的任务为：" + event.getNumCpus() + "个cup，" + event.getMemoryInMbs() + "M存储空间");
+  //          System.out.println("处理RequestResource的请求");
+   // logger.info("Simulator分配的任务为：" + event.getNumCpus() + "个cup，" + event.getMemoryInMbs() + "M存储空间" + "Job ID:"+ event.getId() +"\n");
 
-            //System.out.println("Allocate resources: " + event.getNumCpus() + " + " + event.getMemoryInMbs());
-            // TODO: Ask for resources from neighbours
-            // by sending a ResourceRequest
+            
             List<Address> tempNeighbours = new ArrayList<Address>();
             tempNeighbours.addAll(neighbours);
             jobsFromSimulator.put(event.getId(), event); // Store the job in the map.
+         //   logger.info("jobsFromSimulator"+ jobsFromSimulator.size()+"\n");
             int times = Math.min(NUM_PROBES, neighbours.size());
             for (int i = 0; i < times; i++) {
                 int index = (int) Math.round(Math.random() * (tempNeighbours.size() - 1));
                 RequestResources.Request req = new RequestResources.Request(self, tempNeighbours.get(index), event.getId(), event.getNumCpus(), event.getMemoryInMbs());
                 tempNeighbours.remove(index);
+            //    event.setStartTime(System.currentTimeMillis());
+            //    startTime = System.currentTimeMillis();
+                timePerRequest.put(event.getId(), System.currentTimeMillis());
                 trigger(req, networkPort);
             }
 
@@ -222,14 +219,32 @@ public final class ResourceManager extends ComponentDefinition {
         @Override
         public void handle(RequestResources.AssignJob event) {
             RequestResource job = event.getJob();
+            if(queuedJobs.size()>0){
+            	queuedJobs.add(job);
+            	logger.info("*******************Job ID Enqueue:" + job.getId());
+          // 	jobsFromSimulator.get(job.getId()).setEnqueueTime(System.currentTimeMillis());
+            	
+            }
+            else 
             if (availableResources.isAvailable(job.getNumCpus(), job.getMemoryInMbs())) {
                 availableResources.allocate(job.getNumCpus(), job.getMemoryInMbs());
-            } else {
+        //        logger.info("Job ID dequeue:" + job.getId());
+       
+                endTime = System.currentTimeMillis();
+				startTime = timePerRequest.get(job.getId());
+				timePerRequest.put(job.getId(), (endTime - startTime));
+				averageTime = getAverageTime();		
+				
+				
+            //    jobsFromSimulator.get(job.getId()).setDequeueTime(System.currentTimeMillis());
+            //    jobsFromSimulator.remove(job.getId());
+            } 
+            else {
                 queuedJobs.add(job);
+                logger.info("*******************Job ID Enqueue:" + job.getId());
+           //     jobsFromSimulator.get(event.getJob().getId()).setEnqueueTime(System.currentTimeMillis());
             }
-            
-            logger.info("此时"+self.getId()+"还有"+availableResources.getNumFreeCpus()+"|"+availableResources.getFreeMemInMbs());
-            
+  
             ScheduleTimeout st = new ScheduleTimeout(job.getTimeToHoldResource());
             st.setTimeoutEvent(new JobFinishTimeout(st, job.getId()));
             trigger(st, timerPort);
@@ -254,8 +269,48 @@ public final class ResourceManager extends ComponentDefinition {
                     break;
                 }
             }
+            
+            // handle the next queued job in the waiting list. FIFO
+            if (!queuedJobs.isEmpty()) {
+
+				RequestResource nextjob = queuedJobs.get(0);
+			//	logger.info("job finished"+"Worker ID"+self.getId()+"will arrange resource for"+"FIFO queue next job :" + queuedJobs.get(0).getId());
+
+				boolean success = availableResources.isAvailable(
+						nextjob.getNumCpus(), nextjob.getMemoryInMbs());
+				if (success) {
+					availableResources.allocate(nextjob.getNumCpus(),
+							nextjob.getMemoryInMbs());
+				//	jobsFromSimulator.get(nextjob.getId()).setDequeueTime(System.currentTimeMillis());
+				//	jobsFromSimulator.remove(nextjob.getId());
+					endTime = System.currentTimeMillis();
+					startTime = timePerRequest.get(nextjob.getId());
+					timePerRequest.put(nextjob.getId(), (endTime - startTime));
+					averageTime = getAverageTime();					
+					
+					ScheduleTimeout st = new ScheduleTimeout(nextjob.getTimeToHoldResource());
+					st.setTimeoutEvent(new JobFinishTimeout(st, nextjob.getId()));
+					trigger(st, timerPort);
+				}
+			}
+            
         }
     };
+    
+    static long getAverageTime() {
+    	logger.info("how many jobs:"+timePerRequest.size()+"\n ");
+    	logger.info("timeperRequest"+ timePerRequest);
+		long sum = 0;
+		for(Long l : timePerRequest.values()) {
+			sum += l;
+		}
+		if(timePerRequest.size()==0){
+			return 0;
+		}else{
+		logger.info("avarage latency:"+ sum / timePerRequest.size());
+		return sum / timePerRequest.size();		
+		}
+	}
 
 //--------------------------------------------------------------------------------
     Handler<TManSample> handleTManSample = new Handler<TManSample>() {

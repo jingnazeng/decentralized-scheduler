@@ -10,7 +10,8 @@ import se.sics.kompics.p2p.bootstrap.BootstrapConfiguration;
 
 public class Configuration {
 
-    public static int SNAPSHOT_PERIOD = 1000;
+   // public static int SNAPSHOT_PERIOD = 1000;
+    public static int SNAPSHOT_PERIOD = 6000;
     public static int AVAILABLE_TOPICS = 20;
     public InetAddress ip = null;
 
