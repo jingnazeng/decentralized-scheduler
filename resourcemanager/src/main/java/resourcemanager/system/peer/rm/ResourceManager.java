@@ -6,6 +6,7 @@ import common.simulation.RequestResource;
 import cyclon.system.peer.cyclon.CyclonSample;
 import cyclon.system.peer.cyclon.CyclonSamplePort;
 import cyclon.system.peer.cyclon.PeerDescriptor;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -13,9 +14,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.IOException;
+
+import jxl.*;
+import jxl.read.biff.BiffException;
+import jxl.write.Label;
+import jxl.write.WritableSheet;
+import jxl.write.WritableWorkbook;
+import jxl.write.Number;
+import jxl.write.WriteException;
+import jxl.write.biff.RowsExceededException;
 import se.sics.kompics.ComponentDefinition;
 import se.sics.kompics.Handler;
 import se.sics.kompics.Negative;
@@ -62,6 +75,9 @@ public final class ResourceManager extends ComponentDefinition {
     };
 
     private static final int NUM_PROBES = 3;
+    
+    private static int row=1;
+    private static int column=1;
 
     //This is for Scheduler. The parameter hold the jobs that will be assigned to Workers.
     private Map<Long, RequestResource> jobsFromSimulator = new HashMap<Long, RequestResource>();
@@ -233,7 +249,23 @@ public final class ResourceManager extends ComponentDefinition {
                 endTime = System.currentTimeMillis();
 				startTime = timePerRequest.get(job.getId());
 				timePerRequest.put(job.getId(), (endTime - startTime));
-				averageTime = getAverageTime();		
+			
+					try {
+						averageTime = getAverageTime(column++,row++,self.getId());
+					} catch (RowsExceededException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					} catch (WriteException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					} catch (BiffException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
 				
 				
             //    jobsFromSimulator.get(job.getId()).setDequeueTime(System.currentTimeMillis());
@@ -286,7 +318,23 @@ public final class ResourceManager extends ComponentDefinition {
 					endTime = System.currentTimeMillis();
 					startTime = timePerRequest.get(nextjob.getId());
 					timePerRequest.put(nextjob.getId(), (endTime - startTime));
-					averageTime = getAverageTime();					
+				
+						try {
+							averageTime = getAverageTime(column++,row++,self.getId());
+						} catch (RowsExceededException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} catch (WriteException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} catch (BiffException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+									
 					
 					ScheduleTimeout st = new ScheduleTimeout(nextjob.getTimeToHoldResource());
 					st.setTimeoutEvent(new JobFinishTimeout(st, nextjob.getId()));
@@ -297,7 +345,30 @@ public final class ResourceManager extends ComponentDefinition {
         }
     };
     
-    static long getAverageTime() {
+    static long getAverageTime(int column, int row, int id) throws IOException, RowsExceededException, WriteException, BiffException {
+    	
+    	 WritableWorkbook workbook = Workbook.createWorkbook(new File("output.xls"));
+         WritableSheet sheet = workbook.createSheet("First Sheet", 0);
+  
+ 
+        Label label = new Label(column, row, "Node ID");
+        sheet.addCell(label);
+      
+        Number number = new Number(3, 0,timePerRequest.size());
+        sheet.addCell(number);
+ 
+        Label label0 = new Label(1, 0, "jobs number");
+        sheet.addCell(label0);
+        
+        Label label1 = new Label(2, 0, "Avarage lantency");
+        sheet.addCell(label1);
+         
+        sheet.addCell(new Number(column,row,timePerRequest.size()));
+        logger.info("row:" + row);
+        logger.info("column:"+ column);
+ 
+     
+  
     	logger.info("how many jobs:"+timePerRequest.size()+"\n ");
     	logger.info("timeperRequest"+ timePerRequest);
 		long sum = 0;
@@ -305,9 +376,18 @@ public final class ResourceManager extends ComponentDefinition {
 			sum += l;
 		}
 		if(timePerRequest.size()==0){
+			workbook.write();
+		    workbook.close();
 			return 0;
+			
 		}else{
 		logger.info("avarage latency:"+ sum / timePerRequest.size());
+	    jxl.write.Number anotherWritableCell1 =  new jxl.write.Number(column,row+1,sum/timePerRequest.size());
+		sheet.addCell(anotherWritableCell1);
+		logger.info("row:" + row);
+        logger.info("column:"+ column);
+		workbook.write();
+	    workbook.close();
 		return sum / timePerRequest.size();		
 		}
 	}
